@@ -6,33 +6,6 @@
 > 访问者须知：你是访客 LLM，用 `list`/`cat` 逐级浏览并判断是否命中。
 > 命中不足需要抓取时，先读下文的工具与入库纪律，再动手。
 
-## 本站点工具（scripts/fetch.py）
-
-调用时在技能根执行，`scripts/fetch.py` 为命令式工具（只执行、不做命中/归并判断，判断由访问者 LLM 自己决定）。
-
-工具是设备不是素材，放在技能根的 `scripts/`（与 `library/` 平级），不进 `library/` 的数据树。
-
-| 命令 | 作用 | 是否落盘 |
-|---|---|---|
-| `search <关键词>` | 只搜索，打印视频列表 | 否 |
-| `fetch <关键词>` | 抓取到 `_inbox`（建目录+md），**归位由你判断** | 是 |
-| `cover <BVID>` | 下载单视频封面到其目录 `cover.png` | 是 |
-| `frames <BVID> --n N` | 匿名拉流抽帧到 `帧/` | 是 |
-
-调用示例：
-
-```
-python scripts/fetch.py search 影之刃零
-python scripts/fetch.py --keyword 影之刃零 --page-size 3 fetch
-python scripts/fetch.py cover BV17zsd6nE1Y
-python scripts/fetch.py frames BV17zsd6nE1Y --n 4
-```
-
-说明：
-
-- 搜索/封面/拉流全部**匿名可用**（内部走 wbi 签名 + buvid3 指纹绕过风控）。
-- `search` 用位置参数传关键词；`fetch` 用 `--keyword`。详细参数见 `--help`。
-
 ## B站 缓存目录树（递归语义树）
 
 只有**两种节点**：
@@ -77,6 +50,46 @@ B站/
 - **建库**：新关键词/实体在所属分支下建目录，放与目录同名的摘要 md。
 - **视觉如实**：切片的遮挡/UI 状态如实标注，不贴分。
 - 素材实体（封面、抽帧、切片）不入 git；各级 `*.md` 摘要与工具入库。
+
+## 本站点工具（scripts/fetch.py）
+
+调用时在技能根执行，`scripts/fetch.py` 为命令式工具（只执行、不做命中/归并判断，判断由访问者 LLM 自己决定）。
+
+工具是设备不是素材，放在技能根的 `scripts/`（与 `library/` 平级），不进 `library/` 的数据树。
+
+| 命令 | 作用 | 是否落盘 |
+|---|---|---|
+| `search <关键词>` | 只搜索，打印视频列表 | 否 |
+| `fetch <关键词>` | 抓取到 `_inbox`（建目录+md），**归位由你判断** | 是 |
+| `cover <BVID>` | 下载单视频封面到其目录 `cover.png` | 是 |
+| `frames <BVID> --n N` | 匿名拉流抽帧到 `帧/` | 是 |
+
+调用示例：
+
+```
+python scripts/fetch.py search 影之刃零
+python scripts/fetch.py --keyword 影之刃零 --page-size 3 fetch
+python scripts/fetch.py cover BV17zsd6nE1Y
+python scripts/fetch.py frames BV17zsd6nE1Y --n 4
+```
+
+说明：
+
+- 搜索/封面/拉流全部**匿名可用**（内部走 wbi 签名 + buvid3 指纹绕过风控）。
+- `search` 用位置参数传关键词；`fetch` 用 `--keyword`。详细参数见 `--help`。
+
+### 从便宜到贵
+
+本地未命中、需要联网取数时，按成本递增走，够用就停：
+
+| 级 | 命令 | 花什么 | 能看到什么 | 什么时候走 |
+|---|---|---|---|---|
+| 1 | `search <关键词>` | 一次搜索，不落盘 | 8 条：BVID / 标题 / 播放 / UP | 先确认有没有、值不值得 |
+| 2 | `fetch --keyword` | 一次搜索 + 落整页元数据 | 每条：描述 / 分区 / 时长 / 封面URL | 决定要沉淀这块 |
+| 3a | `cover <BVID>` | 下载 1 张图 | 一张封面静帧 | 只想知道"长什么样" |
+| 3b | `frames <BVID> --n N` | 拉流 + ffmpeg 抽帧 | N 张均匀帧 | 要看动作、服饰、镜头 |
+
+`cover` 与 `frames` 并列，不是先后。`fetch` 一次落整页（默认 8 条），只为一条时成本会放大。
 
 ## 归类与归位（由你判断）
 
