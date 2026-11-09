@@ -23,6 +23,16 @@ library/
 
 ## 环境
 
-- Python 3.12 + `httpx`；抽帧需系统 `ffmpeg`
-- 浏览目录与判断命中用你自己的文件工具，仓库不为此提供脚本
-- **降级**：工具未就绪时，直接列目录树判断命中与结构，纪律不依赖工具
+- Python 3.10+ 与 `httpx`；抽帧另需系统 `ffmpeg`
+- 浏览目录与判断命中：用你自己的文件工具，仓库不为此提供脚本
+- 自检：`python scripts/fetch.py --help`；缺依赖时它会打印装法并退出
+
+**降级**，按实际能做什么分三档：
+
+| 情况 | 还能做什么 | 做不了什么 |
+|---|---|---|
+| `httpx` 缺失 | `python -m pip install httpx`，或 `--target <目录>` 装到临时位置后 `PYTHONPATH=<目录>` 挂载 | 装好前 `search` / `fetch` / `cover` / `frames` 均不可用 |
+| `ffmpeg` 缺失 | `search` / `fetch` / `cover` 照常，封面能拿到 | 不能抽帧；`frames` 抛 `BiliError`，消息里写明缺 ffmpeg |
+| 网络或风控失败 | 读既有缓存判断；没有缓存就如实说取不到 | 不编造结果 |
+
+列目录、读同名 `.md` 判命中，始终不依赖工具。

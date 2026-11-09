@@ -16,8 +16,19 @@ _PROJ = Path(__file__).resolve().parents[1]  # scripts/fetch.py -> 技能根
 sys.path.insert(0, str(_PROJ))
 sys.path.insert(0, str(_PROJ / "scripts"))
 
-import bili  # noqa: E402
-from build_cache import ensure_tree  # noqa: E402
+try:
+    import bili  # noqa: E402
+    from build_cache import ensure_tree  # noqa: E402
+except ModuleNotFoundError as e:
+    if e.name == "httpx":
+        sys.exit(
+            "缺少依赖 httpx（search / fetch / cover / frames 都要它）。\n"
+            "装法任选，都不动仓库：\n"
+            "  python -m pip install httpx\n"
+            "  python -m pip install --target <临时目录> httpx\n"
+            "  PYTHONPATH=<临时目录> python scripts/fetch.py <子命令>\n"
+        )
+    raise
 
 _DEFAULT_OUT = str(_PROJ / "library")
 _SITE = "B站"
@@ -114,6 +125,7 @@ def main() -> None:
     p.add_argument("--page-size", type=int, default=8)
     p.add_argument("--keyword", default="", help="fetch 用的关键词，可逗号分隔")
     p.add_argument("--n", type=int, default=3, help="抽帧数量")
+    p.add_argument("--debug", action="store_true", help="出错时打印完整堆栈（默认只给一行原因）")
     sub = p.add_subparsers(dest="cmd", required=True)
     sp_search = sub.add_parser("search", help="只搜索列表")
     sp_search.add_argument("keyword", help="搜索关键词")
@@ -144,7 +156,13 @@ def main() -> None:
         "cover": cmd_cover,
         "frames": cmd_frames,
     }
-    dispatch[a.cmd](a)
+    try:
+        rc = dispatch[a.cmd](a)
+    except bili.BiliError as e:
+        if a.debug:
+            raise
+        sys.exit(f"[{a.cmd}] {e}")
+    sys.exit(rc)
 
 
 if __name__ == "__main__":
