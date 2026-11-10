@@ -25,7 +25,8 @@ library/
 
 - Python 3.10+ 与 `httpx`；抽帧另需系统 `ffmpeg`
 - 浏览目录与判断命中：用你自己的文件工具，仓库不为此提供脚本
-- 自检：`python scripts/fetch.py --help`；缺依赖时它会打印装法并退出
+- 一眼看全库：`python scripts/fetch.py status`（站点 / 关键词 / 实体 / 视频 / 封面 / 帧 + 工具可用性）
+- 该命令**不联网、不依赖 httpx**——工具全挂时它仍能跑，用来先判断「本地有没有」
 
 **降级**，按实际能做什么分三档：
 
@@ -34,5 +35,7 @@ library/
 | `httpx` 缺失 | `python -m pip install httpx`，或 `--target <目录>` 装到临时位置后 `PYTHONPATH=<目录>` 挂载 | 装好前 `search` / `fetch` / `cover` / `frames` 均不可用 |
 | `ffmpeg` 缺失 | `search` / `fetch` / `cover` 照常，封面能拿到 | 不能抽帧；`frames` 抛 `BiliError`，消息里写明缺 ffmpeg |
 | 网络或风控失败 | 读既有缓存判断；没有缓存就如实说取不到 | 不编造结果 |
+
+三档之外，`status` 始终可用：只读目录，不联网也不导入 `httpx`。
 
 列目录、读同名 `.md` 判命中，始终不依赖工具。

@@ -3,8 +3,9 @@
 命令式，只执行、不做命中/归并判断。内部走 WBI 签名 + buvid3 指纹，
 匿名（无 Cookie 登录态）即可调用搜索、封面与 360P 拉流。
 
-被 `<站点>/tools/fetch.py` 引用：
+被 `scripts/fetch.py` 引用：
     search_videos(keyword, page=1, pagesize=8) -> list[dict]
+    video_info(bvid) -> dict            # 单条，字段与 search 条目对齐
     clean_title(text) -> str
     download_cover(url, dst) -> bool
     sample_frames(bvid, out_dir, n=3) -> int
@@ -158,6 +159,54 @@ def search_videos(keyword: str, page: int = 1, pagesize: int = 8) -> list[dict]:
             }
         )
     return videos
+
+
+def _fmt_duration(sec) -> str:
+    """秒数转「分:秒」，与搜索结果的 duration 字段同形。"""
+    try:
+        s = int(sec)
+    except (TypeError, ValueError):
+        return str(sec or "")
+    return f"{s // 60}:{s % 60:02d}"
+
+
+def video_info(bvid: str) -> dict:
+    """按 BVID 取单条视频信息（不落盘），字段与 search_videos 条目对齐。
+
+    比 search_videos 省一级：不搜关键词、不落整页，适合只要一条的场景。
+    """
+    with _client() as client:
+        _ensure_buvid3(client)
+        data = _get_json(
+            client,
+            "https://api.bilibili.com/x/web-interface/view",
+            {"bvid": bvid},
+            allow=(0, -400, -403, -404),
+        )
+    code = data.get("code")
+    if code == -400:
+        raise BiliError(f"未找到视频 {bvid}：BVID 格式或编号有误")
+    if code == -404:
+        raise BiliError(f"未找到视频 {bvid}：BVID 可能有误，或视频已删除")
+    if code == -403:
+        raise BiliError(f"{bvid} 不可见（可能是私有/付费/地区限制）")
+
+    d = data.get("data") or {}
+    pic = d.get("pic") or ""
+    if pic.startswith("//"):
+        pic = "https:" + pic
+    real = d.get("bvid") or bvid
+    return {
+        "bvid": real,
+        "title": clean_title(d.get("title") or ""),
+        "author": (d.get("owner") or {}).get("name") or "",
+        "play": (d.get("stat") or {}).get("view") or 0,
+        "description": clean_title(d.get("desc") or ""),
+        "pic": pic,
+        "url": f"https://www.bilibili.com/video/{real}",
+        "typename": d.get("tname") or "",
+        "duration": _fmt_duration(d.get("duration")),
+    }
 
 
 def download_cover(url: str, dst: str) -> bool:
