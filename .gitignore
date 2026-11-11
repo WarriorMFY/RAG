@@ -1,4 +1,4 @@
-# 默认忽略一切，仅白名单入库：规则说明文档（LLM只读）＋ 术语库 ＋ 画面库 ＋ 序列库
+# 默认忽略一切，仅白名单入库：规则说明文档（LLM只读）＋ 术语库 ＋ 画面库 ＋ 序列库 ＋ 建库技能
 /*
 !/.gitignore
 !/AGENTS.md
@@ -7,3 +7,8 @@
 !/RAG/术语库
 !/RAG/画面库
 !/RAG/序列库
+!/.workbuddy
+/.workbuddy/*
+!/.workbuddy/skills
+/.workbuddy/skills/*
+!/.workbuddy/skills/guofeng-rag-ingest
