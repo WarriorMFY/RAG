@@ -7,21 +7,18 @@
     python check_cards.py RAG/序列库/结构/一把醉剑走江湖·切点节奏.md
 
 按路径自动判定库别：
-    含 序列库 → 序列卡：front-matter(name+来源) + 一个表格，按表头识别六种卡型
-                 片段卡 时间码|景别|机位/运镜|内容|证据
-                 事件卡 时间码|事件|持续|覆盖/位置|证据
-                 统计卡 区段|时长|段内切点|平均镜长|节奏判断|证据
-                 贯穿卡 时间码|状态|形态/位置|证据
-                 速度卡 起止|播放速度|持续|画面痕迹|证据
-                 光线卡 起止|主光源/方向|亮度·色温|区间内变化|证据
+    含 序列库 → 序列卡：front-matter(name+描述+来源) + 一个两列表（自变量|因变量）
+                 一张卡只记一个因变量：景别/运镜/速度/光线/状态/事件/节奏…
     含 画面库 → 画面卡：front-matter(只 name) + 一个 2 列表（可见特征|证据）
     其他      → 术语卡：front-matter(只 name) + 一个 2 列表（在观测上下文中的含义|出处）
 
 通用检查：
     front-matter 必须有 name；不得声明 分类/轨/史创/有效时间/热度证据 等旧字段
+    序列卡额外要求 描述（一段话，≥40 字）与 来源（含链接）
     正文必须且仅有一个表格（表格外不得有自由内容、裸编号列表、引用块）
     逐行：术语/画面首列须有【标签】、末列（证据/出处）非空
-    序列卡：首列须为时间码或「全片」、末列非空、**不得出现弹幕/评论/点赞**
+    序列卡：两列均非空、自变量以时间码/数字/「全片」开头、首行时间码须从 00:00 起、
+            **不得出现弹幕/评论/点赞**
 
 体积上限：
     术语卡 4096B（4500B WARN）；画面卡 4096B（4500B WARN）；序列卡 8192B（9216B WARN）
@@ -48,15 +45,8 @@ KIND = {
     "seq": {"size": 8192, "warn": 9216, "last": "证据"},
 }
 
-# 序列卡六型：按表头列名精确识别
-SEQ_KINDS = [
-    ("片段", ["时间码", "景别", "机位/运镜", "内容", "证据"]),
-    ("事件", ["时间码", "事件", "持续", "覆盖/位置", "证据"]),
-    ("统计", ["区段", "时长", "段内切点", "平均镜长", "节奏判断", "证据"]),
-    ("贯穿", ["时间码", "状态", "形态/位置", "证据"]),
-    ("速度", ["起止", "播放速度", "持续", "画面痕迹", "证据"]),
-    ("光线", ["起止", "主光源/方向", "亮度·色温", "区间内变化", "证据"]),
-]
+# 序列卡只有一种表头：自变量｜因变量（一张卡一个因变量）
+SEQ_HEADER = ["自变量", "因变量"]
 
 
 def kind_of(path):
@@ -122,8 +112,17 @@ def common_head(text, kind, fails, warns, size, fm):
         if re.search(r"^%s:" % re.escape(key), fm, re.M):
             fails.append("front-matter 声明了 %s（应从证据推断）" % key)
     if kind == "seq":
-        if not re.search(r"^来源:", fm, re.M):
-            warns.append("序列卡建议在 front-matter 写来源（链接）")
+        if not re.search(r"^来源:\s*\S", fm, re.M):
+            fails.append("front-matter 缺 来源（链接）")
+        elif not LINK_RE.search(fm):
+            fails.append("来源里没有链接")
+        # 描述支持单行 `描述: xxx` 与块写法 `描述: >-` + 缩进行
+        desc = re.search(r"^描述:[ \t]*(?:>-?|\|)?[ \t]*(.*(?:\n[ \t]+\S.*)*)", fm, re.M)
+        dtext = re.sub(r"\s+", "", desc.group(1)) if desc else ""
+        if not dtext:
+            fails.append("front-matter 缺 描述（一段话：怎么变/何时用/复刻要点/采集方式）")
+        elif len(dtext) < 40:
+            fails.append("描述仅 %d 字，应写成一段话" % len(dtext))
     elif re.search(r"^(来源|素材|用途):", fm, re.M):
         warns.append("front-matter 多了 name 之外的字段（画面库/术语库只写 name）")
 
@@ -148,55 +147,45 @@ def check_body_sanity(body, fails):
 
 
 def check_seq(text, body, fails, warns):
-    """序列卡：识别卡型并按其表头校验。返回 (卡型, 行数)。"""
+    """序列卡：两列「自变量｜因变量」，一张卡只记一个因变量。返回 (卡型, 行数)。"""
     header, rows, span = parse_first_table(text)
     if header is None:
         fails.append("未找到任何表格")
-        return "?", 0
+        return "双列", 0
 
-    label, cols_expect = None, None
-    # 列名允许带括注说明，如「段内切点（0.15/0.3）」
+    # 列名允许带括注说明，如「自变量（时间/空间）」
     plain = [re.sub(r"[（(].*?[）)]", "", c).strip() for c in header]
-    for name, cols in SEQ_KINDS:
-        if plain == cols:
-            label, cols_expect = name, cols
-            break
-    if label is None:
-        fails.append("表头不属于六种卡型之一（实际：%s）" % "｜".join(header))
-        return "?", len(rows)
-
-    if "证据" not in header:
-        fails.append("表头缺「证据」列")
-
-    # 索引
-    first_i, last_i = 0, len(header) - 1
-    shot_i = header.index("景别") if "景别" in header else None
-    dur_i = header.index("持续") if "持续" in header else None
+    if plain != SEQ_HEADER:
+        fails.append("序列表头应为「自变量｜因变量」（实际：%s）" % "｜".join(header))
+        return "双列", len(rows)
 
     for idx, row in enumerate(rows, 1):
         cells = split_row(row)
-        if len(cells) != len(header):
-            fails.append("第%d行 %d 列，应为 %d 列" % (idx, len(cells), len(header)))
+        if len(cells) != 2:
+            fails.append("第%d行 %d 列，应为 2 列" % (idx, len(cells)))
             continue
-        first, last = cells[first_i], cells[last_i]
-        if not TC_RE.match(first):
-            fails.append("第%d行 首列应为时间码或「全片」" % idx)
-        if not last:
-            fails.append("第%d行 证据为空" % idx)
-        elif not EVID_RE.search(last):
-            fails.append("第%d行 证据列无时间码/帧/《卡名》/待核" % idx)
-        if shot_i is not None and not cells[shot_i]:
-            fails.append("第%d行 景别为空" % idx)
-        if dur_i is not None and not cells[dur_i]:
-            fails.append("第%d行 持续为空" % idx)
+        indep, dep = cells[0], cells[1]
+        if not indep:
+            fails.append("第%d行 自变量为空" % idx)
+        elif not re.match(r"^(\d|全片)", indep):
+            fails.append("第%d行 自变量应以时间码/序号/「全片」开头" % idx)
+        if not dep:
+            fails.append("第%d行 因变量为空" % idx)
         blob = " ".join(cells)
         for word in ("弹幕", "评论", "点赞"):
             if word in blob:
                 fails.append("第%d行 含「%s」——序列卡只写画面演的" % (idx, word))
                 break
 
+    # 零点：自变量从 0 起算（全片卡 00:00=片头，片段卡 00:00=本段起点）
+    if rows:
+        first = split_row(rows[0])[0].strip()
+        if TC_RE.match(first) and not re.match(r"^00:00", first):
+            fails.append("首行自变量应从 00:00 起（实际：%s）——片段卡以本段起点为 00:00，"
+                         "原片绝对区间写进描述；首行之前无取值时补一行负结果" % first)
+
     check_body_sanity(body, fails)
-    return label, len(rows)
+    return "双列", len(rows)
 
 
 def check_file(path):
